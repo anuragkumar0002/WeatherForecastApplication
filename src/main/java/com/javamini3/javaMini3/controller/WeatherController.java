@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.concurrent.CompletableFuture;
+
 @RestController
 public class WeatherController {
 
@@ -19,19 +21,23 @@ public class WeatherController {
     @GetMapping("/weather")
     public ResponseEntity<?> getWeather(@RequestParam String city, @RequestParam String zip, @RequestParam String countryCode) {
         try {
-            AccuWeather accuWeather = weatherService.getAccuWeather(city);
-            OpenWeather openWeather = weatherService.getOpenWeather(zip, countryCode);
+            CompletableFuture<AccuWeather> accuWeatherFuture = weatherService.getAccuWeatherAsync(city);
+            CompletableFuture<OpenWeather> openWeatherFuture = weatherService.getOpenWeatherAsync(zip, countryCode);
+
+            // Wait for both futures to complete
+            CompletableFuture.allOf(accuWeatherFuture, openWeatherFuture).join();
+
+            AccuWeather accuWeather = accuWeatherFuture.get();
+            OpenWeather openWeather = openWeatherFuture.get();
 
             if (accuWeather == null || openWeather == null) {
-                return ResponseEntity.badRequest().body("Invalid location data provide");
+                return ResponseEntity.badRequest().body("Invalid location data provided");
             }
-            System.out.println("AccuWeather: " + accuWeather);
+
             WeatherResponse response = weatherService.aggregateWeatherData(accuWeather, openWeather);
             return ResponseEntity.ok(response);
-        }
-        catch (Exception e) {
-            return ResponseEntity.status(500).body("An error occurred whiled fetching the data");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("An error occurred while fetching the data");
         }
     }
-
 }
